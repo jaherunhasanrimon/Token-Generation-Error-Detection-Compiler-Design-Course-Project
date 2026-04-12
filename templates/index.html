@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Token Tagger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&family=Outfit:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="wall-noise"></div>
+    <div class="paint-orb orb-left"></div>
+    <div class="paint-orb orb-right"></div>
+
+    <main class="app-shell">
+      <header class="hero-panel">
+        <div class="hero-copy-block">
+          <h1>TOKEN TAGGER</h1>
+          <p class="hero-copy">
+            Analyze source code with a Flex-based lexer and review tokens, lexical errors, and summary statistics in one place.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <article class="hero-stat">
+            <span>Engine</span>
+            <strong>Flex + Flask</strong>
+          </article>
+          <article class="hero-stat">
+            <span>Output</span>
+            <strong>Tokens + Errors</strong>
+          </article>
+          <article class="hero-stat">
+            <span>Mode</span>
+            <strong id="heroStatus">Ready</strong>
+          </article>
+        </div>
+      </header>
+
+      <section class="workspace-grid">
+        <section class="panel editor-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-label">Input</p>
+              <span>Source Editor</span>
+            </div>
+            <div class="badge-row">
+              <span class="mini-badge" id="liveTokenCount">0 tokens</span>
+              <span class="mini-badge danger" id="liveErrorCount">0 errors</span>
+            </div>
+          </div>
+
+          <div class="editor-shell">
+            <div class="editor-topbar">
+              <div class="window-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <p>input.c</p>
+            </div>
+            <div class="editor-body">
+              <div id="lineNumbers" class="line-numbers" aria-hidden="true">1</div>
+              <textarea id="codeInput" spellcheck="false" placeholder="Drop your code here...">int main() {
+    int x = 10;
+    float y = 3.14;
+    if (x > 5) {
+        x = x + y;
+    }
+    int $bad = 9;
+    return 0;
+}</textarea>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button id="analyzeBtn" class="primary-btn">Analyze Code</button>
+            <button id="copyBtn" class="ghost-btn">Copy Output</button>
+            <button id="downloadBtn" class="ghost-btn">Download Report</button>
+          </div>
+
+          <div id="statusMessage" class="status-message" aria-live="polite"></div>
+          <div id="loader" class="loader hidden" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <strong>Processing lexer stream...</strong>
+          </div>
+        </section>
+
+        <aside class="insight-stack">
+          <section class="panel summary-panel">
+            <div class="section-heading">
+              <div>
+                <p class="section-label">Overview</p>
+                <span>Analysis Summary</span>
+              </div>
+            </div>
+            <div class="summary-grid">
+              <article class="summary-card">
+                <span>Total Tokens</span>
+                <strong id="totalTokens">0</strong>
+              </article>
+              <article class="summary-card">
+                <span>Total Errors</span>
+                <strong id="totalErrors">0</strong>
+              </article>
+              <article class="summary-card">
+                <span>Lexer Status</span>
+                <strong id="lexerStatus">Idle</strong>
+              </article>
+            </div>
+          </section>
+
+
+        </aside>
+      </section>
+
+      <section class="panel legend-panel" style="margin-bottom: 2.5rem;">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">Legend</p>
+            <span>Token Palette</span>
+          </div>
+        </div>
+        <div class="legend-grid">
+          <span class="legend-item keyword">Keyword</span>
+          <span class="legend-item function">Function</span>
+          <span class="legend-item identifier">Identifier</span>
+          <span class="legend-item number">Number</span>
+          <span class="legend-item operator">Operator</span>
+          <span class="legend-item relation">Relation</span>
+          <span class="legend-item string">String</span>
+          <span class="legend-item char">Char</span>
+          <span class="legend-item comment">Comment</span>
+          <span class="legend-item error">Error</span>
+        </div>
+      </section>
+
+      <section class="results-grid">
+        <section class="panel results-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-label">Output</p>
+              <span>Token Table</span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Line</th>
+                  <th>Type</th>
+                  <th>Lexeme</th>
+                </tr>
+              </thead>
+              <tbody id="tokenBody">
+                <tr class="empty-row">
+                  <td colspan="3">Analyze some code to populate the token table.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel error-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-label">Validation</p>
+              <span>Error Report</span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Line</th>
+                  <th>Invalid Token</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="errorBody">
+                <tr class="empty-row">
+                  <td colspan="3">No lexical errors detected yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <footer class="app-footer">
+        <p>&copy; Rimon Hassan 2026. All rights reserved.</p>
+      </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  </body>
+</html>
