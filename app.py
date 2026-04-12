@@ -19,6 +19,216 @@ def ensure_temp_dir() -> None:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def append_error(errors: list[dict], line: int, lexeme: str, message: str) -> None:
+    candidate = {"line": line, "lexeme": lexeme, "message": message}
+    if candidate not in errors:
+        errors.append(candidate)
+
+
+def add_declaration_validation_errors(tokens: list[dict], errors: list[dict]) -> None:
+    declaration_keywords = {"int", "float", "char"}
+    reserved_keywords = {"int", "float", "char", "if", "else", "while", "for", "return", "void", "main"}
+    tokens_by_line: dict[int, list[dict]] = {}
+
+    for token in tokens:
+        tokens_by_line.setdefault(token["line"], []).append(token)
+
+    for line_number, line_tokens in tokens_by_line.items():
+        if not line_tokens:
+            continue
+
+        first_token = line_tokens[0]
+        if first_token["type"] != "KEYWORD" or first_token["lexeme"] not in declaration_keywords:
+            continue
+
+        if len(line_tokens) < 2:
+            continue
+
+        next_token = line_tokens[1]
+        is_main_function_signature = (
+            next_token["lexeme"] == "main"
+            and len(line_tokens) > 2
+            and line_tokens[2]["type"] == "PUNCTUATION"
+            and line_tokens[2]["lexeme"] == "("
+        )
+
+        if next_token["type"] == "KEYWORD" and not is_main_function_signature:
+            append_error(
+                errors,
+                line_number,
+                next_token["lexeme"],
+                "Invalid variable name. Keywords cannot be used as identifiers.",
+            )
+
+        if next_token["type"] == "PUNCTUATION" and next_token["lexeme"] == "(":
+            invalid_name = "("
+            if len(line_tokens) > 2 and line_tokens[2]["type"] == "IDENTIFIER":
+                invalid_name = f"({line_tokens[2]['lexeme']}"
+
+            append_error(
+                errors,
+                line_number,
+                invalid_name,
+                "Invalid variable name. Identifiers cannot start with '('.",
+            )
+
+        if (
+            len(line_tokens) > 3
+            and line_tokens[1]["type"] == "IDENTIFIER"
+            and line_tokens[2]["type"] == "OPERATOR"
+            and line_tokens[2]["lexeme"] == "-"
+            and line_tokens[3]["type"] == "IDENTIFIER"
+        ):
+            append_error(
+                errors,
+                line_number,
+                f"{line_tokens[1]['lexeme']}-{line_tokens[3]['lexeme']}",
+                "Invalid variable name. Identifiers cannot contain '-'.",
+            )
+
+        if len(line_tokens) > 2 and line_tokens[1]["type"] == "IDENTIFIER" and line_tokens[2]["type"] == "IDENTIFIER":
+            append_error(
+                errors,
+                line_number,
+                f"{line_tokens[1]['lexeme']} {line_tokens[2]['lexeme']}",
+                "Malformed declaration. Missing operator or punctuation after the variable name.",
+            )
+
+        if next_token["type"] == "IDENTIFIER" and next_token["lexeme"] in reserved_keywords:
+            append_error(
+                errors,
+                line_number,
+                next_token["lexeme"],
+                "Invalid variable name. Keywords cannot be used as identifiers.",
+            )
+
+
+def add_missing_semicolon_errors(tokens: list[dict], errors: list[dict]) -> None:
+    tokens_by_line: dict[int, list[dict]] = {}
+    existing_error_lines = {error["line"] for error in errors}
+
+    for token in tokens:
+        tokens_by_line.setdefault(token["line"], []).append(token)
+
+    declaration_keywords = {"int", "float", "char"}
+    control_keywords = {"if", "else", "while", "for"}
+
+    for line_number, line_tokens in tokens_by_line.items():
+        if not line_tokens or line_number in existing_error_lines:
+            continue
+
+        lexemes = [token["lexeme"] for token in line_tokens]
+        first_token = line_tokens[0]
+        ends_with_semicolon = ";" in lexemes
+        opens_block = "{" in lexemes
+        closes_block_only = len(line_tokens) == 1 and lexemes[0] == "}"
+
+        if ends_with_semicolon or opens_block or closes_block_only:
+            continue
+
+        should_end_with_semicolon = False
+
+        if first_token["type"] == "KEYWORD" and first_token["lexeme"] in declaration_keywords:
+            should_end_with_semicolon = True
+        elif first_token["type"] == "KEYWORD" and first_token["lexeme"] == "return":
+            should_end_with_semicolon = True
+        elif first_token["type"] == "FUNCTION":
+            should_end_with_semicolon = True
+        elif first_token["type"] == "IDENTIFIER" and "=" in lexemes:
+            should_end_with_semicolon = True
+        elif first_token["type"] == "KEYWORD" and first_token["lexeme"] in control_keywords:
+            should_end_with_semicolon = False
+
+        if should_end_with_semicolon:
+            append_error(
+                errors,
+                line_number,
+                "".join(lexemes),
+                "Missing semicolon ';' at the end of the statement.",
+            )
+
+
+def add_parenthesis_validation_errors(tokens: list[dict], errors: list[dict]) -> None:
+    tokens_by_line: dict[int, list[dict]] = {}
+
+    for token in tokens:
+        tokens_by_line.setdefault(token["line"], []).append(token)
+
+    for line_number, line_tokens in tokens_by_line.items():
+        if not line_tokens:
+            continue
+
+        lexemes = [token["lexeme"] for token in line_tokens]
+        open_paren = lexemes.count("(")
+        close_paren = lexemes.count(")")
+
+        if open_paren > close_paren:
+            append_error(
+                errors,
+                line_number,
+                "".join(lexemes),
+                "Missing closing parenthesis ')'.",
+            )
+        elif close_paren > open_paren:
+            append_error(
+                errors,
+                line_number,
+                "".join(lexemes),
+                "Unexpected closing parenthesis ')'.",
+            )
+
+
+def add_operator_sequence_errors(tokens: list[dict], errors: list[dict]) -> None:
+    tokens_by_line: dict[int, list[dict]] = {}
+    operator_types = {"OPERATOR", "RELATIONAL_OP", "LOGICAL_OP"}
+
+    for token in tokens:
+        tokens_by_line.setdefault(token["line"], []).append(token)
+
+    for line_number, line_tokens in tokens_by_line.items():
+        for current_token, next_token in zip(line_tokens, line_tokens[1:]):
+            if current_token["type"] not in operator_types or next_token["type"] not in operator_types:
+                continue
+
+            allowed_pairs = {
+                ("+", "+"),
+                ("-", "-"),
+                ("=", "="),
+                ("&", "&"),
+                ("|", "|"),
+            }
+            pair = (current_token["lexeme"], next_token["lexeme"])
+            if pair in allowed_pairs:
+                continue
+
+            append_error(
+                errors,
+                line_number,
+                f"{current_token['lexeme']} {next_token['lexeme']}",
+                "Invalid operator sequence.",
+            )
+
+
+def add_brace_validation_errors(tokens: list[dict], errors: list[dict]) -> None:
+    balance = 0
+    last_line = 1
+
+    for token in tokens:
+        last_line = max(last_line, token["line"])
+        if token["type"] != "PUNCTUATION":
+            continue
+        if token["lexeme"] == "{":
+            balance += 1
+        elif token["lexeme"] == "}":
+            if balance == 0:
+                append_error(errors, token["line"], "}", "Unexpected closing brace '}'.")
+            else:
+                balance -= 1
+
+    if balance > 0:
+        append_error(errors, last_line, "{", "Missing closing brace '}'.")
+
+
 def parse_lexer_output(output: str) -> dict:
     tokens: list[dict] = []
     errors: list[dict] = []
@@ -78,6 +288,12 @@ def parse_lexer_output(output: str) -> dict:
                     "lexeme": lexeme,
                 }
             )
+
+    add_declaration_validation_errors(tokens, errors)
+    add_missing_semicolon_errors(tokens, errors)
+    add_parenthesis_validation_errors(tokens, errors)
+    add_operator_sequence_errors(tokens, errors)
+    add_brace_validation_errors(tokens, errors)
 
     return {
         "tokens": tokens,
