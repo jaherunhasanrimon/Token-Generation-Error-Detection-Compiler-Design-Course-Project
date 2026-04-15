@@ -62,8 +62,7 @@ project/
 │   └── script.js
 ├── temp/
 │   └── input.c
-├── README.md
-└── LAB_REPORT.md
+└── README.md
 ```
 
 ## How It Works
